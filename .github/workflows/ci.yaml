@@ -1,0 +1,30 @@
+# CI: the shared Gameplane workflow for split components (lint with Gameplane's
+# .golangci.yml and .hadolint.yaml, race tests on amd64 and arm64 with the
+# .testcoverage.yml gate, govulncheck, image build). Pinned by SHA.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 4 * * 1" # weekly, so govulncheck sees new advisories
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ci:
+    uses: GameplanePanel/Gameplane/.github/workflows/go-component.yaml@a9195f596eb0d36776767b691bbdd8f5962fa394 # master
+    with:
+      dockerfiles: Dockerfile.frp Dockerfile.tailscale Dockerfile.playit
+      # Profile local UDP forwarding against direct echo (moved from Gameplane's go job).
+      amd64-extra: |
+        go test -count=1 -v -run '^TestRelayLoadForwardingProfile$' -cpuprofile="$RUNNER_TEMP/relay.cpu" -memprofile="$RUNNER_TEMP/relay.mem" -o "$RUNNER_TEMP/relay.test" .
+        go tool pprof -top -cum -nodecount=12 -focus='forwarder' "$RUNNER_TEMP/relay.test" "$RUNNER_TEMP/relay.cpu"
+        go tool pprof -top -alloc_space -nodecount=12 -focus='forwarder' "$RUNNER_TEMP/relay.test" "$RUNNER_TEMP/relay.mem"
