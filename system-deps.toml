@@ -6,10 +6,10 @@ component = "tunnel"
 name = "go"
 kind = "toolchain"
 version = "go"
-reason = "Compiles and tests the tunnel module (go.work:3-21; inventory 2.1; nested frpc module is outside go.work, tunnel/frpc/go.mod)."
+reason = "Compiles and tests the tunnel module (and the nested frpc build module)."
 
 [[dep]]
 name = "golangci-lint"
 kind = "cli"
 version = "golangci_lint"
-reason = "make lint-go runs golangci-lint in this module (Makefile:302-305; GO_MODULES at Makefile:43)."
+reason = "golangci-lint runs on this module with Gameplane's root .golangci.yml (shared go-component.yaml workflow)."
