@@ -1,11 +1,8 @@
-FROM --platform=$BUILDPLATFORM golang:1.27.3-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.27.4-alpine AS build
 WORKDIR /src
 
-# tunnel's go.mod currently has no gameaction requirement (no local
-# replace directive), so this COPY is a no-op for the build. It is kept
-# only for structural parity with sentinel/Dockerfile, api/Dockerfile, and
-# agent/Dockerfile, which do depend on gameaction.
-COPY gameaction/ ./gameaction/
+# Build context: the Gameplane repo root, where this repo is the tunnel/
+# submodule (standalone CI checks it out under tunnel/ for the same layout).
 COPY tunnel/go.mod tunnel/go.sum* ./tunnel/
 WORKDIR /src/tunnel
 RUN go mod download
