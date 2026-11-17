@@ -1,5 +1,5 @@
 # Coverage threshold gate for the tunnel module.
-# Enforced by `make cover-go-check` via go-test-coverage/v2.
+# Enforced in CI by Gameplane's shared go-component.yaml workflow (go-test-coverage/v2).
 #
 # The tunnel supervisor configures and supervises a third-party relay process
 # (frp, Tailscale, or playit). Tests cover env parsing, credential reading,

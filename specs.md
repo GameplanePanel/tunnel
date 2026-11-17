@@ -1,5 +1,7 @@
 # tunnel — Specification
 
+> This repository is checked out as the `tunnel/` submodule of [GameplanePanel/Gameplane](https://github.com/GameplanePanel/Gameplane). Paths such as `docs/`, `operator/`, `api/`, `charts/` and `web/` below refer to that repository.
+
 **Status:** pre-v1 (v0.4.1)  
 **Module / command:** `github.com/GameplanePanel/gameplane/tunnel`  
 **Dependencies:** Go stdlib and `tailscale.com/tsnet` (F-173, #722)
@@ -10,7 +12,7 @@ Relay client supervisor that configures and supervises frp/playit child processe
 
 ## Responsibilities
 
-- Expose cached provider evidence as bounded Prometheus gauges on `/metrics` at the existing health port 8091, including known/unknown connection, confirmed forwards/assignment and observation timestamp. Scraping never queries the provider; unknown or stale connection evidence has no `connected` value. Tailscale uses the same snapshot for readiness and metrics. See `docs/monitoring.md`.
+- Expose cached provider evidence as bounded Prometheus gauges on `/metrics` at the existing health port 8091, including known/unknown connection, confirmed forwards/assignment and observation timestamp. Scraping never queries the provider; unknown or stale connection evidence has no `connected` value. Tailscale uses the same snapshot for readiness and metrics. See [`docs/monitoring.md`](https://github.com/GameplanePanel/Gameplane/blob/master/docs/monitoring.md).
 
 1. Parse environment variables to determine the tunnel provider (frp, tailscale, or playit), backing service address, and provider-specific config.
 2. Read provider-specific credentials from the mounted Secret at `/etc/gameplane/tunnel-auth` (read-only).
@@ -118,11 +120,11 @@ playit.gg assigns a tunnel's public address server-side, so the supervisor learn
 
 ### Embedded Tailscale forwarding (F-173 / #722)
 
-The maintainer chose embedded `tailscale.com/tsnet` for TCP and UDP; the decision is recorded in [OPEN-DECISIONS.md](../specs/done_018-v0-3-release-readiness/OPEN-DECISIONS.md#od-031-tailscale-game-forwarding-f-173--resolved-2026-10-21). No tailscaled executable, CLI, subnet router, exit node, Serve or Funnel configuration is used.
+The maintainer chose embedded `tailscale.com/tsnet` for TCP and UDP; the decision is recorded in [OPEN-DECISIONS.md](https://github.com/GameplanePanel/Gameplane/blob/master/specs/done_018-v0-3-release-readiness/OPEN-DECISIONS.md#od-031-tailscale-game-forwarding-f-173--resolved-2026-10-21). No tailscaled executable, CLI, subnet router, exit node, Serve or Funnel configuration is used.
 
 - `tailscaleForwardPlan` accepts only the exact `<gameserver>.<namespace>.svc` host and explicitly advertised protocol/port pairs. Inbound bytes never select a backend address. TCP listens on both tailnet families; UDP binds each assigned tailnet IP because tsnet requires an explicit address.
 - The ordinary Go network dialer resolves the Service for each new TCP connection or UDP session. Existing streams/sessions can fail during Service/backend replacement; reconnecting clients resolve the current Service. UDP sessions expire after 30 seconds without traffic in either direction; server-only updates keep an established session alive.
-- A shared budget covers every port, protocol and address family. The default is 128 sessions and four queued UDP datagrams per peer (65,507 bytes each) plus one response buffer per UDP session. The operator supplies `TAILSCALE_MAX_SESSIONS` and `TAILSCALE_UDP_QUEUE`. Full budgets or queues drop incoming UDP and excess TCP connections close. Dials and UDP writes time out after five seconds. TCP sockets have five-minute activity timeouts. Shutdown closes listeners and sockets, cancels pending dials, then joins workers. See [relay capacity and measurements](../docs/relay-health.md#forwarding-capacity) for configuration bounds, counters and workload methodology.
+- A shared budget covers every port, protocol and address family. The default is 128 sessions and four queued UDP datagrams per peer (65,507 bytes each) plus one response buffer per UDP session. The operator supplies `TAILSCALE_MAX_SESSIONS` and `TAILSCALE_UDP_QUEUE`. Full budgets or queues drop incoming UDP and excess TCP connections close. Dials and UDP writes time out after five seconds. TCP sockets have five-minute activity timeouts. Shutdown closes listeners and sockets, cancels pending dials, then joins workers. See [relay capacity and measurements](https://github.com/GameplanePanel/Gameplane/blob/master/docs/relay-health.md#forwarding-capacity) for configuration bounds, counters and workload methodology.
 - `tsnet.Server` receives the existing hostname, normalized requested tags and mounted auth key. There is no untagged fallback. The fixed state directory `/var/lib/gameplane-tailscale` uses a per-Pod EmptyDir owned through fsGroup 65532. Container restarts reuse identity. Pod replacement loses state and needs a reusable valid auth key; the Deployment uses Recreate. This is not durable identity across Pod replacement. Remove stale devices in the tailnet admin console to free the hostname. A suffixed/conflicting MagicDNS name cannot report the originally advertised name as ready.
 - The operator validates tag syntax before creating the Deployment. Invalid tags remove a prior Deployment and report `TunnelReady=False/InvalidTailscaleTags` with correction guidance; fixing the tags resumes reconciliation. Authentication or tag-authorization failures still fail closed inside tsnet, with no registration attempt that omits requested tags.
 - `Up` has a two-minute attempt deadline; failed attempts use the existing capped retry delay. After binding every listener, the binary polls local tailnet status every two seconds with a two-second deadline. Loss of online status, tags or hostname clears readiness. Address changes recreate listeners. Failed listeners close all forwarding sockets and retry. Credentials and interactive login URLs are excluded from logs.
@@ -131,7 +133,7 @@ The maintainer chose embedded `tailscale.com/tsnet` for TCP and UDP; the decisio
 - Readiness establishes local forwarding capacity and tailnet authentication. It does not prove a particular player's grant or game application health, and it deliberately remains ready while the game sleeps so traffic can reach the sentinel. Tailnet grants/ACLs still determine which peers may connect. Missing tags, denied registration, device approval and hostname conflicts require administrator repair.
 - Upgrading from the former daemon implementation re-registers the Pod. Replace the auth key first if it was single-use. Coordinate operator and tunnel image upgrades; the new protocol-bearing port contract rejects old ambiguous entries.
 
-The disposable integration procedure in [tailscale-forwarding-integration.md](../docs/tailscale-forwarding-integration.md) covers actual tailnet TCP/UDP, denied grants, backend replacement and registration/restart outcomes. Unit transports use real local sockets; they do not establish live tailnet coverage.
+The disposable integration procedure in [tailscale-forwarding-integration.md](https://github.com/GameplanePanel/Gameplane/blob/master/docs/tailscale-forwarding-integration.md) covers actual tailnet TCP/UDP, denied grants, backend replacement and registration/restart outcomes. Unit transports use real local sockets; they do not establish live tailnet coverage.
 
 ## Key Invariants
 
@@ -282,11 +284,11 @@ The maintainer explicitly approved ending the stdlib-only policy for tsnet in #7
 
 ## References
 
-- **Architecture:** `docs/tunnels.md` (tunnel provider setup, wake-on-connect interaction, troubleshooting)
+- **Architecture:** [`docs/tunnels.md`](https://github.com/GameplanePanel/Gameplane/blob/master/docs/tunnels.md) (tunnel provider setup, wake-on-connect interaction, troubleshooting)
 - **CRD & operator integration:** `operator/internal/controller/gameserver_tunnel.go` (deployment creation, env var composition), `operator/internal/controller/tunnel_rbac.go` (RBAC for playit), `operator/api/v1alpha1/gameserver_types.go` (CRD fields)
 - **Consumers:** Operator (operator/internal/controller/gameserver_controller.go invokes planTunnel and reconcileTunnel), API (api/internal/handlers may report tunnel endpoints to dashboard)
 - **Related specs:** `operator/specs.md` (CRD reconciliation), `api/specs.md` (endpoint reporting)
-- **CLAUDE.md:** "K8s-native by default" (rule 9) and "Operator is authoritative" (rule 10)
+- **Gameplane [`AGENTS.md`](https://github.com/GameplanePanel/Gameplane/blob/master/AGENTS.md):** "Kubernetes primitives first" (core rule 9) and "Operator authority" (core rule 10)
 
 ## Relay health and identity contract (#721, #723)
 
@@ -328,5 +330,5 @@ Backoff has no jitter and remains capped at 300 seconds. Both nonzero and clean
 unexpected exits back off. It resets to one second only after one uninterrupted
 minute of confirmed, non-stale readiness. Resource configuration retains #724's
 `TunnelResources` interface (nil defaults 25m/64Mi requests, non-nil overrides,
-empty object clears). See [relay health and upgrade guidance](../docs/relay-health.md)
+empty object clears). See [relay health and upgrade guidance](https://github.com/GameplanePanel/Gameplane/blob/master/docs/relay-health.md)
 for migration and integration coverage. Tests run in CI only.
