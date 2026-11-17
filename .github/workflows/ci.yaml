@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   ci:
-    uses: GameplanePanel/Gameplane/.github/workflows/go-component.yaml@a9195f596eb0d36776767b691bbdd8f5962fa394 # master
+    uses: GameplanePanel/Gameplane/.github/workflows/go-component.yaml@783aefb67b0744eaf8d0ee51cb10d94ae9739fd6 # master
     with:
       dockerfiles: Dockerfile.frp Dockerfile.tailscale Dockerfile.playit
       # Profile local UDP forwarding against direct echo (moved from Gameplane's go job).
