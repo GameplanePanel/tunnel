@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"strconv"
 	"strings"
 	"sync"
@@ -64,6 +65,9 @@ type forwarder struct {
 	telemetry *forwardTelemetry
 	limits    forwardLimits
 	slots     chan struct{}
+	perPeer   int
+	peerMu    sync.Mutex
+	peerFlows map[netip.Addr]int
 	wg        sync.WaitGroup
 	listeners []io.Closer // registered before Close; no concurrent additions
 	closeOnce sync.Once
@@ -73,7 +77,70 @@ type forwarder struct {
 func newForwarder(ctx context.Context, telemetry *forwardTelemetry) *forwarder {
 	ctx, cancel := context.WithCancel(ctx)
 	limits := telemetry.limits
-	return &forwarder{telemetry: telemetry, ctx: ctx, cancel: cancel, limits: limits, slots: make(chan struct{}, limits.sessions), failed: make(chan error, 1)}
+	return &forwarder{telemetry: telemetry, ctx: ctx, cancel: cancel, limits: limits, slots: make(chan struct{}, limits.sessions), perPeer: perPeerFlowLimit(limits.sessions), peerFlows: map[netip.Addr]int{}, failed: make(chan error, 1)}
+}
+
+// perPeerFlowLimit is how many of the shared sessions one tailnet source
+// address may hold at once: a quarter of the budget, and never fewer than two.
+// Without it a single peer the ACL lets in could open every slot and trickle
+// bytes to keep them alive, locking every other player out.
+func perPeerFlowLimit(sessions int) int {
+	return max(2, sessions/4)
+}
+
+// peerAddr returns the source IP of a tailnet client, or false when the
+// address is not an IP:port (never the case for tsnet listeners).
+func peerAddr(addr net.Addr) (netip.Addr, bool) {
+	if addr == nil {
+		return netip.Addr{}, false
+	}
+	ap, err := netip.ParseAddrPort(addr.String())
+	if err != nil {
+		return netip.Addr{}, false
+	}
+	return ap.Addr().Unmap(), true
+}
+
+// acquirePeer takes a shared slot for a flow from peer, refusing it when that
+// peer already holds its per-peer share. A flow whose source cannot be parsed
+// counts against the shared budget only.
+func (f *forwarder) acquirePeer(protocol *flowCounts, peer net.Addr) (netip.Addr, bool) {
+	ip, ok := peerAddr(peer)
+	if ok {
+		f.peerMu.Lock()
+		if f.peerFlows[ip] >= f.perPeer {
+			f.peerMu.Unlock()
+			protocol.rejected.Add(1)
+			return netip.Addr{}, false
+		}
+		f.peerFlows[ip]++
+		f.peerMu.Unlock()
+	}
+	if !f.acquire(protocol) {
+		if ok {
+			f.releasePeerAddr(ip)
+		}
+		return netip.Addr{}, false
+	}
+	return ip, true
+}
+
+// releasePeer returns a flow's shared slot and its per-peer share.
+func (f *forwarder) releasePeer(protocol *flowCounts, ip netip.Addr) {
+	f.release(protocol)
+	if ip.IsValid() {
+		f.releasePeerAddr(ip)
+	}
+}
+
+func (f *forwarder) releasePeerAddr(ip netip.Addr) {
+	f.peerMu.Lock()
+	defer f.peerMu.Unlock()
+	if f.peerFlows[ip] <= 1 {
+		delete(f.peerFlows, ip)
+		return
+	}
+	f.peerFlows[ip]--
 }
 
 func (f *forwarder) Close() {
@@ -117,14 +184,15 @@ func (f *forwarder) serveTCP(listener net.Listener, target string) {
 				f.fail(fmt.Errorf("TCP listener: %w", err))
 				return
 			}
-			if !f.acquire(&f.telemetry.tcp) {
+			ip, ok := f.acquirePeer(&f.telemetry.tcp, client.RemoteAddr())
+			if !ok {
 				_ = client.Close()
 				continue
 			}
 			f.wg.Add(1)
 			go func() {
 				defer f.wg.Done()
-				defer f.release(&f.telemetry.tcp)
+				defer f.releasePeer(&f.telemetry.tcp, ip)
 				f.proxyTCP(client, target)
 			}()
 		}
@@ -216,20 +284,22 @@ func (f *forwarder) serveUDP(listener net.PacketConn, target string) {
 			key := peer.String()
 			mu.Lock()
 			session := sessions[key]
-			if session == nil && f.acquire(&f.telemetry.udp) {
-				session = &udpForwardSession{packets: make(chan udpPacket, f.limits.udpQueue)}
-				sessions[key] = session
-				f.wg.Add(1)
-				go func(session *udpForwardSession, peer net.Addr, key string) {
-					defer f.wg.Done()
-					defer func() {
-						mu.Lock()
-						delete(sessions, key)
-						f.release(&f.telemetry.udp)
-						mu.Unlock()
-					}()
-					f.proxyUDP(listener, peer, session.packets, target)
-				}(session, peer, key)
+			if session == nil {
+				if ip, ok := f.acquirePeer(&f.telemetry.udp, peer); ok {
+					session = &udpForwardSession{packets: make(chan udpPacket, f.limits.udpQueue)}
+					sessions[key] = session
+					f.wg.Add(1)
+					go func(session *udpForwardSession, peer net.Addr, key string) {
+						defer f.wg.Done()
+						defer func() {
+							mu.Lock()
+							delete(sessions, key)
+							f.releasePeer(&f.telemetry.udp, ip)
+							mu.Unlock()
+						}()
+						f.proxyUDP(listener, peer, session.packets, target)
+					}(session, peer, key)
+				}
 			}
 			if session != nil {
 				f.enqueue(session, buf[:n], received)
