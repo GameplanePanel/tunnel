@@ -23,6 +23,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"os/exec"
@@ -353,11 +354,17 @@ transport.tcpMuxKeepaliveInterval = 5
 			return "", fmt.Errorf("invalid port mapping: %q", entry)
 		}
 		name := strings.TrimSpace(parts[0])
-		localPort := strings.TrimSpace(parts[1])
-		remotePort := strings.TrimSpace(parts[2])
 		protocol := strings.ToLower(strings.TrimSpace(parts[3]))
 		if protocol != "tcp" && protocol != "udp" {
 			return "", fmt.Errorf("invalid port mapping protocol: %q", entry)
+		}
+		localPort, err := parsePortNumber(parts[1])
+		if err != nil {
+			return "", fmt.Errorf("invalid port mapping port: %q", entry)
+		}
+		remotePort, err := parsePortNumber(parts[2])
+		if err != nil {
+			return "", fmt.Errorf("invalid port mapping port: %q", entry)
 		}
 
 		config += fmt.Sprintf(`
@@ -365,12 +372,12 @@ transport.tcpMuxKeepaliveInterval = 5
 name = "%s"
 type = "%s"
 localIP = "%s"
-localPort = %s
-remotePort = %s
-`, escapeTomlString(name), protocol, cfg.BackingServiceDNS, localPort, remotePort)
+localPort = %d
+remotePort = %d
+`, escapeTomlString(name), protocol, escapeTomlString(cfg.BackingServiceDNS), localPort, remotePort)
 	}
 
-	if err := os.WriteFile(frpConfigPath, []byte(config), 0o600); err != nil {
+	if err := writePrivateFile(frpConfigPath, []byte(config)); err != nil {
 		return "", fmt.Errorf("write frpc config: %w", err)
 	}
 
@@ -444,22 +451,77 @@ func parseTailscaleTags(tagsStr string) ([]string, error) {
 // so the secret never appears in the process's argv, which is readable by
 // anything that can see /proc/<pid>/cmdline in the pod.
 func renderPlayitConfig(secretKey string) (string, error) {
-	if err := os.WriteFile(playitAuthPath, []byte(secretKey), 0o600); err != nil {
+	if err := writePrivateFile(playitAuthPath, []byte(secretKey)); err != nil {
 		return "", fmt.Errorf("write playit secret: %w", err)
 	}
 
 	return playitAuthPath, nil
 }
 
+// parsePortNumber parses a TCP/UDP port from a BACKING_SERVICE_PORT entry and
+// rejects anything that is not a decimal integer in 1..65535. Rejecting
+// non-numeric input here keeps raw text out of the rendered TOML.
+func parsePortNumber(s string) (int, error) {
+	port, err := strconv.Atoi(strings.TrimSpace(s))
+	if err != nil {
+		return 0, fmt.Errorf("parse port %q: %w", s, err)
+	}
+	if port < 1 || port > 65535 {
+		return 0, fmt.Errorf("port %d out of range 1-65535", port)
+	}
+	return port, nil
+}
+
+// writePrivateFile replaces path with a regular file holding data, mode 0600.
+// The existing path is removed first (a symlink is removed itself, not
+// followed), and the file is then created with O_EXCL. Removing first and
+// opening with O_EXCL means a pre-planted file or symlink at the fixed /tmp
+// path can neither redirect the write nor keep a wider mode.
+func writePrivateFile(path string, data []byte) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("remove %s: %w", path, err)
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", path, err)
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	if err := f.Close(); err != nil {
+		return fmt.Errorf("close %s: %w", path, err)
+	}
+	return nil
+}
+
 // escapeTomlString escapes special characters in a TOML string value.
+// Backslash, quote, newline, carriage return and tab get their short escapes;
+// any other control byte (< 0x20 or 0x7f) becomes a \uXXXX escape. Bytes are
+// handled one at a time, so multi-byte UTF-8 passes through unchanged.
 func escapeTomlString(s string) string {
-	return strings.NewReplacer(
-		"\\", "\\\\",
-		"\"", "\\\"",
-		"\n", "\\n",
-		"\r", "\\r",
-		"\t", "\\t",
-	).Replace(s)
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case c == '\\':
+			b.WriteString("\\\\")
+		case c == '"':
+			b.WriteString("\\\"")
+		case c == '\n':
+			b.WriteString("\\n")
+		case c == '\r':
+			b.WriteString("\\r")
+		case c == '\t':
+			b.WriteString("\\t")
+		case c < 0x20 || c == 0x7f:
+			fmt.Fprintf(&b, "\\u%04X", c)
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
 }
 
 // buildCommand constructs the command to run the relay process for

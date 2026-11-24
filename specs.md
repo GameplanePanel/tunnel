@@ -97,7 +97,7 @@ Whitespace (leading/trailing newlines, spaces) is trimmed from credential values
 | frp | `/tmp/gameplane-tunnel-frpc.toml` | TOML | Rendered by `renderFrpConfig`; read by frpc process |
 | playit | `/tmp/gameplane-tunnel-playit-auth` | Raw text (secret key) | Rendered by `renderPlayitConfig`; read by playitd via `--secret-path` flag |
 
-frp/playit rendered files use mode 0600 and are removed when `run` returns. Tailscale uses the state volume described below; no daemon config or CLI auth file is produced.
+frp ports are validated as integers in 1–65535 before rendering; anything else is rejected and never written into the TOML. frp TOML strings (including `localIP`) are escaped, and control characters become `\uXXXX`. frp/playit config and secret files are recreated on each render: any existing path (including a symlink) is removed, then the file is created with `O_EXCL` at mode 0600, so a planted file cannot redirect the write or keep a wider mode. frp/playit rendered files use mode 0600 and are removed when `run` returns. Tailscale uses the state volume described below; no daemon config or CLI auth file is produced.
 
 ### Relay Binaries and Command-Line Arguments
 
