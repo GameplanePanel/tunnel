@@ -6,6 +6,7 @@ import (
 	"io"
 	"net"
 	"net/http/httptest"
+	"net/netip"
 	"strconv"
 	"strings"
 	"testing"
@@ -273,5 +274,50 @@ func TestTailscaleUDPServerTrafficKeepsSessionAlive(t *testing.T) {
 	}
 	if len(f.slots) != 0 {
 		t.Fatal("silent session did not expire")
+	}
+}
+
+func TestForwarderCapsFlowsPerPeer(t *testing.T) {
+	f := newForwarder(context.Background(), &forwardTelemetry{limits: defaultForwardLimits})
+	defer f.Close()
+	if f.perPeer != 32 {
+		t.Fatalf("per-peer limit = %d, want 32 for 128 sessions", f.perPeer)
+	}
+	peer := &net.TCPAddr{IP: net.ParseIP("100.64.0.1"), Port: 40000}
+	var held []netip.Addr
+	for i := range f.perPeer {
+		ip, ok := f.acquirePeer(&f.telemetry.tcp, peer)
+		if !ok {
+			t.Fatalf("flow %d from one peer refused below its share", i)
+		}
+		held = append(held, ip)
+	}
+	if _, ok := f.acquirePeer(&f.telemetry.udp, &net.UDPAddr{IP: net.ParseIP("100.64.0.1"), Port: 1}); ok {
+		t.Fatal("peer exceeded its share across protocols")
+	}
+	other, ok := f.acquirePeer(&f.telemetry.tcp, &net.TCPAddr{IP: net.ParseIP("100.64.0.2"), Port: 40000})
+	if !ok {
+		t.Fatal("another peer was locked out by the first peer's flows")
+	}
+	f.releasePeer(&f.telemetry.tcp, other)
+	f.releasePeer(&f.telemetry.tcp, held[0])
+	if ip, ok := f.acquirePeer(&f.telemetry.tcp, peer); !ok {
+		t.Fatal("released share was not returned to the peer")
+	} else {
+		f.releasePeer(&f.telemetry.tcp, ip)
+	}
+	for _, ip := range held[1:] {
+		f.releasePeer(&f.telemetry.tcp, ip)
+	}
+	if len(f.peerFlows) != 0 || len(f.slots) != 0 {
+		t.Fatalf("leaked accounting: peers=%v slots=%d", f.peerFlows, len(f.slots))
+	}
+}
+
+func TestPerPeerFlowLimitFloor(t *testing.T) {
+	for sessions, want := range map[int]int{1: 2, 2: 2, 8: 2, 12: 3, 128: 32, 256: 64} {
+		if got := perPeerFlowLimit(sessions); got != want {
+			t.Errorf("perPeerFlowLimit(%d) = %d, want %d", sessions, got, want)
+		}
 	}
 }
