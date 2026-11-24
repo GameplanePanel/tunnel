@@ -1104,3 +1104,77 @@ func TestRunCommandContextCancellation(t *testing.T) {
 		t.Errorf("runCommand() took %v after cancellation, want well under the sleep's 5s duration", elapsed)
 	}
 }
+
+func TestRenderFrpConfigRejectsNonNumericPort(t *testing.T) {
+	cfg := Config{
+		FrpServerAddr:      "frp.example.com",
+		FrpServerPort:      7000,
+		BackingServiceDNS:  "my-server.games.svc",
+		BackingServicePort: "game:25565\n[[proxies]]:30000:tcp",
+	}
+
+	cfg.GameServerUID = "fixture-uid"
+	_, err := renderFrpConfig(cfg, "token")
+	if err == nil || !strings.Contains(err.Error(), "invalid port mapping port") {
+		t.Errorf("renderFrpConfig() error = %v, want invalid port mapping port error", err)
+	}
+}
+
+func TestRenderFrpConfigRejectsOutOfRangePort(t *testing.T) {
+	for _, mapping := range []string{"game:0:30000:tcp", "game:25565:70000:tcp"} {
+		cfg := Config{
+			FrpServerAddr:      "frp.example.com",
+			FrpServerPort:      7000,
+			BackingServiceDNS:  "my-server.games.svc",
+			BackingServicePort: mapping,
+		}
+
+		cfg.GameServerUID = "fixture-uid"
+		_, err := renderFrpConfig(cfg, "token")
+		if err == nil || !strings.Contains(err.Error(), "invalid port mapping port") {
+			t.Errorf("renderFrpConfig(%q) error = %v, want invalid port mapping port error", mapping, err)
+		}
+	}
+}
+
+func TestEscapeTomlStringControlChars(t *testing.T) {
+	if got, want := escapeTomlString("a\x00b\x1b"), "a\\u0000b\\u001B"; got != want {
+		t.Errorf("escapeTomlString() = %q, want %q", got, want)
+	}
+}
+
+func TestWritePrivateFileReplacesSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target")
+	path := filepath.Join(dir, "secret")
+
+	if err := os.WriteFile(target, []byte("original"), 0o644); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	if err := os.Symlink(target, path); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	if err := writePrivateFile(path, []byte("x")); err != nil {
+		t.Fatalf("writePrivateFile() error = %v", err)
+	}
+
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read target: %v", err)
+	}
+	if string(got) != "original" {
+		t.Errorf("symlink target was modified: %q", got)
+	}
+
+	info, err := os.Lstat(path)
+	if err != nil {
+		t.Fatalf("lstat path: %v", err)
+	}
+	if !info.Mode().IsRegular() {
+		t.Errorf("path mode = %v, want regular file", info.Mode())
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("path permissions = %o, want 600", perm)
+	}
+}
