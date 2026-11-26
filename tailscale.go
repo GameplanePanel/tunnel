@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"net/http"
 	"net/netip"
 	"slices"
 	"strings"
@@ -85,7 +84,7 @@ func runTailscale(ctx context.Context, cfg Config, authKey string) error {
 	if err != nil {
 		return fmt.Errorf("tailscale health listener: %w", err)
 	}
-	health := &http.Server{Handler: relayHealthHandler(healthHistory), ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second, IdleTimeout: 10 * time.Second}
+	health := newRelayHealthServer(healthHistory)
 	healthDone := make(chan error, 1)
 	go func() { healthDone <- health.Serve(listener) }()
 	defer func() { _ = health.Close() }()

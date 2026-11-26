@@ -13,7 +13,7 @@ address while the game sleeps, so a connection attempt can still wake the server
 | Tailscale | `tunnel-tailscale` (`Dockerfile.tailscale`) | embedded `tailscale.com/tsnet` node that forwards advertised TCP/UDP ports to the GameServer's Service |
 | playit | `tunnel-playit` (`Dockerfile.playit`) | supervises `playitd` and reports the assigned addresses into `status.tunnelEndpoints` |
 
-Readiness, `/metrics` and restart backoff are served on port 8091.
+`/healthz`, `/readyz`, `/status` and `/metrics` are served on port 8091.
 
 ## Using it
 

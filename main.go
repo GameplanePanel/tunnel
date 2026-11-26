@@ -235,11 +235,7 @@ func run(ctx context.Context, cfg Config) error {
 	if err != nil {
 		return fmt.Errorf("render config: %w", err)
 	}
-	defer func() {
-		if configFile != "" {
-			_ = os.Remove(configFile)
-		}
-	}()
+	defer func() { _ = os.Remove(configFile) }()
 
 	// playit assigns the public address server-side; poll playitd for it
 	// and report it into status.tunnelEndpoints for the lifetime of run.
