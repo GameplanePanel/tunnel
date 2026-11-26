@@ -8,7 +8,7 @@ This repository holds the relay client supervisor for frp, Tailscale (embedded t
 - **CI** is `.github/workflows/ci.yaml`, a thin caller of Gameplane's shared [`go-component.yaml`](https://github.com/GameplanePanel/Gameplane/blob/master/.github/workflows/go-component.yaml), pinned by SHA: lint with Gameplane's root `.golangci.yml` and `.hadolint.yaml` (no copy here), race tests on amd64 and arm64 with the `.testcoverage.yml` gate, govulncheck, and an image build. Dependabot runs in this repository.
 - **Images** `tunnel-frp`, `tunnel-tailscale` and `tunnel-playit` (`Dockerfile.frp`, `Dockerfile.tailscale`, `Dockerfile.playit`, built by `make image-tunnel-frp|tailscale|playit`) are built and published from the Gameplane repository root: the Dockerfiles copy `tunnel/...` from that build context.
 - **Callers live in Gameplane:** paths such as `operator/`, `api/`, `charts/`, `docs/` and `web/` in `specs.md` and code comments refer to that repository.
-- **Shipping a change:** PR to `main` here → after it merges, bump the `tunnel` pointer in Gameplane (`git -C tunnel checkout <merged sha on main>`, `git add tunnel`) in a Gameplane PR. A user-visible change gets its `changelog/unreleased/` entry in that Gameplane PR.
+- **Shipping a change:** PR to `master` here → after it merges, bump the `tunnel` pointer in Gameplane (`git -C tunnel checkout <merged sha on master>`, `git add tunnel`) in a Gameplane PR. A user-visible change gets its `changelog/unreleased/` entry in that Gameplane PR.
 
 ## Rules
 
