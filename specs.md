@@ -2,7 +2,7 @@
 
 > This repository is checked out as the `tunnel/` submodule of [GameplanePanel/Gameplane](https://github.com/GameplanePanel/Gameplane). Paths such as `docs/`, `operator/`, `api/`, `charts/` and `web/` below refer to that repository.
 
-**Status:** pre-v1 (v0.4.1)  
+**Status:** pre-v1 (v0.5.0)  
 **Module / command:** `github.com/GameplanePanel/gameplane/tunnel`  
 **Dependencies:** Go stdlib and `tailscale.com/tsnet` (F-173, #722)
 
@@ -55,7 +55,7 @@ tunnel/
 └── .testcoverage.yml    # 70% coverage gate
 ```
 
-Single executable module; no subdirectories or packages.
+One executable module. Besides the files above it holds the relay health and metrics files (`relay_health.go`, `relay_metrics.go`, `forward_metrics.go`), the benchmark driver (`cmd/relay-load/`, `internal/relayload/`, `bench/`) and the separate `frpc/` module that `Dockerfile.frp` builds frpc from.
 
 ## External Interface / Contracts
 
@@ -63,7 +63,7 @@ Single executable module; no subdirectories or packages.
 
 | Variable | Type | Required | Description |
 |---|---|---|---|
-| `GAMESERVER_NAME` | string | yes | Name of the GameServer resource (used in logs and for playit tunnel naming) |
+| `GAMESERVER_NAME` | string | yes | Name of the GameServer resource (used in logs) |
 | `GAMESERVER_NAMESPACE` | string | yes | Kubernetes namespace of the GameServer |
 | `GAMESERVER_UID` | string | if frp | Immutable GameServer UID, used as frpc `user`; nonempty, up to 128 letters/digits/hyphens. No namespace/name fallback. |
 | `TUNNEL_TYPE` | enum (frp\|tailscale\|playit) | yes | Relay provider to use |
@@ -74,7 +74,7 @@ Single executable module; no subdirectories or packages.
 | `TAILSCALE_HOSTNAME` | string | if tailscale | MagicDNS hostname in the tailnet; fatal if unset for tailscale provider |
 | `TAILSCALE_TAGS` | string | no | Comma-separated requested tags. Whitespace/empty entries are removed, bare names receive `tag:`, duplicates are removed. Invalid tags fail startup. Requested tags must be granted by tailnet `tagOwners`; refusal does not fall back to an untagged identity. |
 | `BACKING_SERVICE_PORTS` | string | if tailscale or playit | Tailscale: `name:port:protocol,...`, only `tcp` and `udp`, at most 32 unique protocol/port pairs. Playit retains `name:port,...`. Upgrade operator and tunnel images together; ambiguous legacy Tailscale mappings fail closed. |
-| `PLAYIT_TUNNEL_NAME` | string | if playit | Label/name for the playit tunnel; fatal if unset for playit provider |
+| `PLAYIT_TUNNEL_NAME` | string | if playit | Required for the playit provider (fatal if unset); validated only, never passed to playitd |
 
 **Validation**: At startup, `loadConfig` enforces mutual requirement rules: frp mandates `FRP_SERVER_ADDR` and `BACKING_SERVICE_PORT`; tailscale mandates `TAILSCALE_HOSTNAME` and `BACKING_SERVICE_PORTS`; playit mandates `PLAYIT_TUNNEL_NAME` and `BACKING_SERVICE_PORTS`. Invalid `FRP_SERVER_PORT` values (non-numeric, out of range 1–65535) are fatal. Unknown `TUNNEL_TYPE` values are fatal.
 
@@ -233,7 +233,7 @@ When the pod receives SIGTERM (e.g., during cluster shutdown or pod deletion):
 ## Dependencies
 
 **Internal:** None  
-**External:** `tailscale.com/tsnet` v1.104.2 and Go stdlib. The playit status patch uses plain `net/http` against the API server without adding client-go.
+**External:** `tailscale.com/tsnet` v1.104.7 and Go stdlib. The playit status patch uses plain `net/http` against the API server without adding client-go.
 **Go version:** 1.27.4+ (the minimum required by Tailscale v1.104.7)
 
 The maintainer explicitly approved ending the stdlib-only policy for tsnet in #722. Version 1.104.2 preserves the upstream Tailscale security update while retaining the embedded TCP/UDP forwarding implementation. CI resolves the latest Go 1.27 patch; the workspace and tunnel module require at least Go 1.27.4, and tunnel image builders use Go 1.27.4. Track future tsnet/security updates through go.mod/go.sum. frpc and playitd remain external binaries.

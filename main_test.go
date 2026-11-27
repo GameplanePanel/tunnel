@@ -890,10 +890,9 @@ func TestIsUnrecoverable(t *testing.T) {
 		{"generic", errors.New("something went wrong"), false},
 	}
 
-	cfg := Config{}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := isUnrecoverable(cfg, tt.err)
+			got := isUnrecoverable(tt.err)
 			if got != tt.want {
 				t.Errorf("isUnrecoverable(%v) = %v, want %v", tt.err, got, tt.want)
 			}

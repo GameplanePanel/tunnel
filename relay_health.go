@@ -117,6 +117,12 @@ func relayHealthHandler(h *relayHealth) http.Handler {
 	return mux
 }
 
+// newRelayHealthServer builds the health and metrics server every provider
+// serves on Pod TCP 8091.
+func newRelayHealthServer(h *relayHealth) *http.Server {
+	return &http.Server{Handler: relayHealthHandler(h), ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second, IdleTimeout: 10 * time.Second}
+}
+
 type relayCheck func(context.Context) relayObservation
 
 func startRelayHealth(ctx context.Context, h *relayHealth) (func(), error) {
@@ -124,7 +130,7 @@ func startRelayHealth(ctx context.Context, h *relayHealth) (func(), error) {
 	if err != nil {
 		return nil, fmt.Errorf("relay health listener: %w", err)
 	}
-	server := &http.Server{Handler: relayHealthHandler(h), ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second, IdleTimeout: 10 * time.Second}
+	server := newRelayHealthServer(h)
 	done := make(chan struct{})
 	go func() { defer close(done); _ = server.Serve(listener) }()
 	return func() { _ = server.Close(); <-done }, nil
@@ -162,7 +168,7 @@ func waitRelayRetry(ctx context.Context, delay time.Duration) bool {
 
 // Each attempt owns its monitor. Joining it before clearing state prevents a
 // final in-flight response from re-marking an exited child ready.
-func superviseRelay(ctx context.Context, cfg Config, h *relayHealth, check relayCheck, runChild func(context.Context) error, wait func(context.Context, time.Duration) bool) error {
+func superviseRelay(ctx context.Context, h *relayHealth, check relayCheck, runChild func(context.Context) error, wait func(context.Context, time.Duration) bool) error {
 	backoff := &exponentialBackoff{}
 	for ctx.Err() == nil {
 		h.clear()
@@ -179,7 +185,7 @@ func superviseRelay(ctx context.Context, cfg Config, h *relayHealth, check relay
 		default:
 		}
 		log.Print("relay process exited; readiness cleared")
-		if isUnrecoverable(cfg, err) {
+		if isUnrecoverable(err) {
 			return fmt.Errorf("unrecoverable relay error: %w", err)
 		}
 		// A clean unexpected exit is also a failure. Never busy-loop on it.

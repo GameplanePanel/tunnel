@@ -119,7 +119,9 @@ func TestTailnetReadinessTracksAuthenticationListenersAndDisconnect(t *testing.T
 	var ready atomic.Bool
 	ports := []forwardPort{{network: "tcp", port: "25565", target: "127.0.0.1:1"}, {network: "udp", port: "19132", target: "127.0.0.1:2"}}
 	done := make(chan error, 1)
-	go func() { done <- serveTailnet(ctx, node, []string{"tag:game"}, ports, &ready, time.Millisecond) }()
+	go func() {
+		done <- serveTailnetObserved(ctx, node, []string{"tag:game"}, ports, &ready, time.Millisecond, nil, nil)
+	}()
 	awaitTailnetReady(t, &ready, true)
 	if len(node.listened) != 3 || node.listened[0] != "tcp:25565" || node.listened[1] != "udp100.64.0.1:19132" || node.listened[2] != "udp[fd7a:115c:a1e0::1]:19132" {
 		t.Fatalf("unexpected port/family exposure: %v", node.listened)
@@ -167,7 +169,7 @@ func TestTailnetFailuresNeverBecomeReady(t *testing.T) {
 				node.listenErr = true
 			}
 			var ready atomic.Bool
-			err := serveTailnet(context.Background(), node, tags, []forwardPort{{network: "tcp", port: "1", target: "127.0.0.1:1"}, {network: "udp", port: "2", target: "127.0.0.1:2"}}, &ready, time.Millisecond)
+			err := serveTailnetObserved(context.Background(), node, tags, []forwardPort{{network: "tcp", port: "1", target: "127.0.0.1:1"}, {network: "udp", port: "2", target: "127.0.0.1:2"}}, &ready, time.Millisecond, nil, nil)
 			if err == nil || ready.Load() {
 				t.Fatalf("failure became ready: %v", err)
 			}
@@ -207,7 +209,7 @@ func TestTailnetListenerFailureClearsReady(t *testing.T) {
 	var ready atomic.Bool
 	done := make(chan error, 1)
 	go func() {
-		done <- serveTailnet(ctx, node, nil, []forwardPort{{network: "tcp", port: "25565", target: "127.0.0.1:1"}}, &ready, time.Millisecond)
+		done <- serveTailnetObserved(ctx, node, nil, []forwardPort{{network: "tcp", port: "25565", target: "127.0.0.1:1"}}, &ready, time.Millisecond, nil, nil)
 	}()
 	awaitTailnetReady(t, &ready, true)
 	_ = node.listeners[0].Close()

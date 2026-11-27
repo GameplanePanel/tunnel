@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"net/http"
 	"net/netip"
 	"slices"
 	"strings"
@@ -85,7 +84,7 @@ func runTailscale(ctx context.Context, cfg Config, authKey string) error {
 	if err != nil {
 		return fmt.Errorf("tailscale health listener: %w", err)
 	}
-	health := &http.Server{Handler: relayHealthHandler(healthHistory), ReadHeaderTimeout: 2 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 5 * time.Second, IdleTimeout: 10 * time.Second}
+	health := newRelayHealthServer(healthHistory)
 	healthDone := make(chan error, 1)
 	go func() { healthDone <- health.Serve(listener) }()
 	defer func() { _ = health.Close() }()
@@ -162,10 +161,6 @@ func tailnetReady(status *ipnstate.Status, tags []string) bool {
 		}
 	}
 	return true
-}
-
-func serveTailnet(ctx context.Context, node tailnetNode, tags []string, ports []forwardPort, ready *atomic.Bool, poll time.Duration) error {
-	return serveTailnetObserved(ctx, node, tags, ports, ready, poll, nil, nil)
 }
 
 func serveTailnetObserved(ctx context.Context, node tailnetNode, tags []string, ports []forwardPort, ready *atomic.Bool, poll time.Duration, telemetry *forwardTelemetry, observe func(bool)) error {

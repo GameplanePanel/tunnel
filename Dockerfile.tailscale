@@ -25,6 +25,5 @@ FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=build /out/tunnel /tunnel
 USER 65532:65532
-EXPOSE 25565/tcp 25565/udp
 EXPOSE 8091/tcp
 ENTRYPOINT ["/tunnel"]
