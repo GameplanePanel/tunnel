@@ -163,10 +163,6 @@ func tailnetReady(status *ipnstate.Status, tags []string) bool {
 	return true
 }
 
-func serveTailnet(ctx context.Context, node tailnetNode, tags []string, ports []forwardPort, ready *atomic.Bool, poll time.Duration) error {
-	return serveTailnetObserved(ctx, node, tags, ports, ready, poll, nil, nil)
-}
-
 func serveTailnetObserved(ctx context.Context, node tailnetNode, tags []string, ports []forwardPort, ready *atomic.Bool, poll time.Duration, telemetry *forwardTelemetry, observe func(bool)) error {
 	ready.Store(false)
 	defer ready.Store(false)

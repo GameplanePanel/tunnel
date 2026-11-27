@@ -136,7 +136,7 @@ func TestSupervisionBoundsCleanExitRetriesAndCancels(t *testing.T) {
 	defer cancel()
 	calls := 0
 	var delays []time.Duration
-	err := superviseRelay(ctx, Config{}, &relayHealth{}, nil, func(context.Context) error { calls++; return nil }, func(_ context.Context, delay time.Duration) bool {
+	err := superviseRelay(ctx, &relayHealth{}, nil, func(context.Context) error { calls++; return nil }, func(_ context.Context, delay time.Duration) bool {
 		delays = append(delays, delay)
 		if calls == 4 {
 			cancel()
@@ -155,7 +155,7 @@ func TestSupervisionBoundsCleanExitRetriesAndCancels(t *testing.T) {
 	if waitRelayRetry(ctx, time.Hour) {
 		t.Fatal("cancelled wait continued")
 	}
-	err = superviseRelay(context.Background(), Config{}, &relayHealth{}, nil, func(context.Context) error { return errors.New("exit status 127") }, waitRelayRetry)
+	err = superviseRelay(context.Background(), &relayHealth{}, nil, func(context.Context) error { return errors.New("exit status 127") }, waitRelayRetry)
 	if err == nil {
 		t.Fatal("unrecoverable child error was retried")
 	}
@@ -216,7 +216,7 @@ func TestExitedChildCannotBeMadeReadyByLateStatus(t *testing.T) {
 		<-ctx.Done()
 		return relayObservation{Connection: "connected", Forwards: true, Assigned: true}
 	}
-	err := superviseRelay(context.Background(), Config{}, h, check, func(context.Context) error { <-queryStarted; return errors.New("child exited") }, func(context.Context, time.Duration) bool { return false })
+	err := superviseRelay(context.Background(), h, check, func(context.Context) error { <-queryStarted; return errors.New("child exited") }, func(context.Context, time.Duration) bool { return false })
 	if err != nil || h.snapshot(time.Now()).Ready {
 		t.Fatalf("late status restored exited child: err=%v state=%+v", err, h.snapshot(time.Now()))
 	}

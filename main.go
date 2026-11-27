@@ -260,7 +260,7 @@ func run(ctx context.Context, cfg Config) error {
 		}
 		defer closeHealth()
 	}
-	return superviseRelay(ctx, cfg, h, relayHealthCheck(cfg, creds), func(attemptCtx context.Context) error {
+	return superviseRelay(ctx, h, relayHealthCheck(cfg, creds), func(attemptCtx context.Context) error {
 		log.Printf("starting %s relay process", cfg.TunnelType)
 		return runCommand(attemptCtx, buildCommand(attemptCtx, cfg))
 	}, waitRelayRetry)
@@ -615,7 +615,7 @@ func runCommand(ctx context.Context, cmd *exec.Cmd) error {
 // missing credentials) vs. transient (e.g., network failure, relay unavailable).
 // Heuristic: if the error looks like a permission/config issue, it's unrecoverable;
 // otherwise assume it's transient and worth retrying.
-func isUnrecoverable(_ Config, err error) bool {
+func isUnrecoverable(err error) bool {
 	if err == nil {
 		return false
 	}

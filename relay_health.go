@@ -168,7 +168,7 @@ func waitRelayRetry(ctx context.Context, delay time.Duration) bool {
 
 // Each attempt owns its monitor. Joining it before clearing state prevents a
 // final in-flight response from re-marking an exited child ready.
-func superviseRelay(ctx context.Context, cfg Config, h *relayHealth, check relayCheck, runChild func(context.Context) error, wait func(context.Context, time.Duration) bool) error {
+func superviseRelay(ctx context.Context, h *relayHealth, check relayCheck, runChild func(context.Context) error, wait func(context.Context, time.Duration) bool) error {
 	backoff := &exponentialBackoff{}
 	for ctx.Err() == nil {
 		h.clear()
@@ -185,7 +185,7 @@ func superviseRelay(ctx context.Context, cfg Config, h *relayHealth, check relay
 		default:
 		}
 		log.Print("relay process exited; readiness cleared")
-		if isUnrecoverable(cfg, err) {
+		if isUnrecoverable(err) {
 			return fmt.Errorf("unrecoverable relay error: %w", err)
 		}
 		// A clean unexpected exit is also a failure. Never busy-loop on it.
